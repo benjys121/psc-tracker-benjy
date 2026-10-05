@@ -255,3 +255,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .
 .group-head { font-family: var(--cond); font-weight: 700; font-size: 19px; letter-spacing: .06em; text-transform: uppercase; margin: 30px 0 0; padding: 4px 10px; background: var(--ink); color: #fff; display: inline-block; }
 .group-head span { color: var(--gold); margin-left: 6px; }
 @media (max-width: 720px) { .watch.starred { padding-left: 12px; } .title-row .star { margin-top: 4px; } }
+
+/* Summaries */
+.case-sum { margin: 10px 0 0; font-size: 16.5px; line-height: 1.5; color: var(--ink-2); max-width: 44em; }
+.case-sum.lead { font-size: 19px; margin: 4px 0 6px; color: var(--ink); }
+.sum { font-size: 15px; line-height: 1.45; color: var(--ink-2); margin: 3px 0 2px; max-width: 44em; }
+.filing p.sum { margin: 4px 0 4px; }

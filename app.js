@@ -377,6 +377,7 @@ function filingRow(f, seen) {
     <span class="when">${shortDate(f.date)}</span>
     <div>
       <div class="what"><span class="type">${esc(f.doc_type)}</span><a class="doc" href="${esc(doc.url)}" target="_blank" rel="noopener">${esc(doc.title)}</a>${extra}</div>
+      ${f.summary ? `<div class="sum">${esc(f.summary)}</div>` : ""}
       <div class="meta">${esc(f.filer_short || f.filer)}</div>
     </div></li>`;
 }
@@ -404,6 +405,7 @@ function watchCard(c) {
     <div class="watch-main">
       <h2><a href="#/case/${esc(c.case)}">${esc(m.title || c.case)}</a></h2>
       <div class="who">${esc(m.companies || "")}</div>
+      ${c.summary ? `<p class="case-sum">${esc(c.summary)}</p>` : ""}
       ${categoryPills(c)}
       <ul class="filings">${c.filings.slice(0, 6).map((f) => filingRow(f, seen)).join("")}</ul>
       <div class="actions">
@@ -545,6 +547,7 @@ function renderCase(caseNo) {
     <header class="case-head">
       <div class="kicker">${esc([m.industry, m.type, m.subtype].filter(Boolean).join(" · "))}</div>
       <div class="title-row">${starButton(c)}<h1>${esc(m.title)}</h1></div>
+      ${c.summary ? `<p class="case-sum lead">${esc(c.summary)}</p>` : ""}
       ${categoryPills(c)}
       <dl class="facts">
         <div><dt>Case</dt><dd class="caseno">${esc(c.case)}</dd></div>
@@ -590,6 +593,7 @@ function renderCase(caseNo) {
             const isNew = f.filing_seq > seen;
             return `<div class="filing${isNew ? " new" : ""}">
               <div class="head">${isNew ? '<span class="tag gold">New</span> ' : ""}<span class="type">${esc(f.doc_type)}</span> · <b>${esc(f.filer_short || f.filer)}</b> · item ${esc(f.item_no)}</div>
+              ${f.summary ? `<p class="sum">${esc(f.summary)}</p>` : ""}
               <ul>${f.documents
                 .map(
                   (doc) =>
