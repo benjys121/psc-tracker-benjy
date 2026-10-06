@@ -636,12 +636,12 @@ function renderBriefing(day) {
   setNav("briefing");
   const all = DATA.briefings.filter((b) => b.items.length || b.watchlist?.length);
   if (!all.length) {
-    view.innerHTML = `<h2 class="section-head">Morning briefings</h2><div class="empty"><p><strong>No briefings yet.</strong> They appear here after each morning post.</p></div>`;
+    view.innerHTML = `<h2 class="section-head">PSC Updates</h2><div class="empty"><p><strong>No briefings yet.</strong> They appear here after each morning post.</p></div>`;
     return;
   }
   const b = all.find((x) => x.date === day) || all[0];
   view.innerHTML = `
-    <h2 class="section-head">Morning briefings <span class="tools kicker">${esc(longDate(b.date))}</span></h2>
+    <h2 class="section-head">PSC Updates <span class="tools kicker">${esc(longDate(b.date))}</span></h2>
     <div class="brief-dates">${all
       .slice(0, 20)
       .map((x) => `<a class="chip${x === b ? " on" : ""}" href="#/briefing/${x.date}" style="text-decoration:none">${shortDate(x.date)}</a>`)
@@ -666,7 +666,7 @@ function renderBriefing(day) {
             .map(
               (w) => `<article class="item"><div class="side"><a class="caseno" href="#/case/${esc(w.case)}">${esc(w.case)}</a></div>
             <div><div class="who">${esc(w.title || "")}</div><ul>${w.filings
-              .map((f) => `<li><a class="doc" href="${esc(f.url || w.url)}" target="_blank" rel="noopener">${esc(f.title)}</a> <span>— ${esc(f.doc_type)}</span></li>`)
+              .map((f) => `<li><a class="doc" href="${esc(f.url || w.url)}" target="_blank" rel="noopener">${esc(f.title)}</a> <span>— ${esc(f.doc_type)}</span>${f.summary ? `<div class="sum">${esc(f.summary)}</div>` : ""}</li>`)
               .join("")}</ul></div></article>`
             )
             .join("")}`
