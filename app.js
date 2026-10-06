@@ -216,7 +216,10 @@ async function sendCommand(action, cases = [], names = []) {
   await fetch(DATA.webhook, {
     method: "POST",
     mode: "no-cors",
-    body: new URLSearchParams({ payload: JSON.stringify({ text: `${text} — ${MARKER}` }) }),
+    // Posted as a reply in the bot's "Dashboard requests" thread, so it stays out of the channel.
+    body: new URLSearchParams({
+      payload: JSON.stringify({ text: `${text} — ${DATA.marker || MARKER}`, ...(DATA.thread_ts ? { thread_ts: DATA.thread_ts } : {}) }),
+    }),
   });
   const ops = [];
   if (cases.length && names.length) cases.forEach((c) => names.forEach((n) => ops.push({ action, case: c, name: n })));
