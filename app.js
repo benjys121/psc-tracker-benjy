@@ -346,10 +346,6 @@ view.addEventListener("click", (e) => {
     }
   } else if (a === "tracksearchcase") {
     act("track", [caseNo]);
-  } else if (a === "searchother") {
-    const existing = findSearch(`#${el.dataset.seq}`);
-    if (existing) location.hash = `#/search/${existing.seq}`;
-    else act("search", [], [`#${el.dataset.seq}`]);
   } else if (a === "unsearch") {
     if (confirm("Remove this saved search?")) act("unsearch", [], [`#${el.dataset.seq}`]);
   } else if (a === "editcats") {
@@ -665,14 +661,6 @@ function searchFilingRow(f, s) {
   </div>`;
 }
 
-// "#8516" -> the organization's name, when an earlier search listed it as another match
-function searchLabel(q) {
-  const seq = Number((q.match(/^#(\d+)$/) || [])[1]);
-  if (!seq) return q;
-  for (const x of DATA.searches || []) for (const o of x.others || []) if (o.seq === seq) return o.name;
-  return q;
-}
-
 function renderSearch(arg) {
   setNav("search");
   const saved = DATA.searches || [];
@@ -692,7 +680,7 @@ function renderSearch(arg) {
     <h2 class="section-head">Saved searches</h2>
     <div class="chips search-chips">
       ${saved.map((x) => `<a class="chip${current && x.seq === current.seq ? " on" : ""}" href="#/search/${x.seq}" style="text-decoration:none">${esc(x.name)}<span class="n">${x.filings.length.toLocaleString()}</span></a>`).join("")}
-      ${waiting.map((p) => `<span class="chip ghost">Searching “${esc(searchLabel(p.name))}”…</span>`).join("")}
+      ${waiting.map((p) => `<span class="chip ghost">Searching “${esc(p.name)}”…</span>`).join("")}
       ${!saved.length && !waiting.length ? `<p class="empty">No saved searches yet. Search for an organization above.</p>` : ""}
     </div>
     <div id="results"></div>`;
@@ -726,7 +714,6 @@ function renderSearch(arg) {
       <div class="kicker">Filings by</div>
       <h1>${esc(current.name)}</h1>
       <p class="case-sum">${current.filings.length.toLocaleString()} filings in ${cases.size.toLocaleString()} cases${years.length ? `, ${years[years.length - 1]}–${years[0]}` : ""}. Searched as “${esc(current.query)}”.</p>
-      ${current.others?.length ? `<p class="others">Also matched: ${current.others.map((o) => `<button class="pill add" data-act="searchother" data-seq="${o.seq}" data-name="${esc(o.name)}">${esc(o.name)}</button>`).join(" ")}</p>` : ""}
       <div class="case-actions">${removing ? `<span class="tag ink">Removing…</span>` : `<button class="textbtn quiet" data-act="unsearch" data-seq="${current.seq}">Remove this search</button>`}</div>
     </header>
     <div class="filters">
