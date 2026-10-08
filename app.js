@@ -156,6 +156,7 @@ const cleanCategory = (s) => (s || "").replace(/^[\s"'`#.,;:—–-]+|[\s"'`#.,;
 // Requests sent to Slack but not yet reflected in the published data. Stars and categories are
 // shown optimistically from these; each is dropped once the data matches (or after an hour).
 const opKey = (p) =>
+  p.action.endsWith("search") ? `search:${lc(p.name)}` :
   p.action.endsWith("track") ? `track:${p.case}` :
   p.action.endsWith("star") ? `star:${p.case}` :
   p.action.endsWith("tag") ? `tag:${p.case}:${lc(p.name)}` : `cat:${lc(p.name)}`;
@@ -169,6 +170,8 @@ function resolved(p) {
     case "unstar": return !c || !c.starred;
     case "tag": return !c || (c.categories || []).some((x) => lc(x) === lc(p.name));
     case "untag": return !c || !(c.categories || []).some((x) => lc(x) === lc(p.name));
+    case "search": return findSearch(p.name) != null;
+    case "unsearch": return findSearch(p.name) == null;
     case "newcat": return (DATA.categories || []).some((x) => lc(x) === lc(p.name));
     case "delcat": return !(DATA.categories || []).some((x) => lc(x) === lc(p.name));
   }
@@ -181,6 +184,9 @@ function pending() {
   storage.set(PENDING_KEY, list);
   return list;
 }
+// A saved search by "#4172" or by the words it was saved under / the organization's name.
+const findSearch = (q) =>
+  (DATA.searches || []).find((x) => `#${x.seq}` === q || lc(x.query) === lc(q) || lc(x.name) === lc(q));
 const pendingFor = (caseNo) => pending().find((p) => p.case === caseNo && p.action.endsWith("track"));
 
 // Effective (optimistic) state
@@ -338,6 +344,14 @@ view.addEventListener("click", (e) => {
       if (lc(getPrefs().filter) === lc(`cat:${name}`)) setPrefs({ filter: "all" });
       act("delcat", [], [name]);
     }
+  } else if (a === "tracksearchcase") {
+    act("track", [caseNo]);
+  } else if (a === "searchother") {
+    const existing = findSearch(`#${el.dataset.seq}`);
+    if (existing) location.hash = `#/search/${existing.seq}`;
+    else act("search", [], [`#${el.dataset.seq}`]);
+  } else if (a === "unsearch") {
+    if (confirm("Remove this saved search?")) act("unsearch", [], [`#${el.dataset.seq}`]);
   } else if (a === "editcats") {
     editingCategories = !editingCategories;
     renderWatchlist();
@@ -633,6 +647,137 @@ function renderCase(caseNo) {
   );
 }
 
+/* ---------- search: every filing by a company or organization ---------- */
+
+function searchFilingRow(f, s) {
+  const tracked = isTracked(f.case);
+  const title = s.titles?.[f.case];
+  const caseLink = tracked
+    ? `<a class="caseno-sm" href="#/case/${esc(f.case)}">${esc(f.case)}</a>`
+    : `<a class="caseno-sm" href="https://documents.dps.ny.gov/public/MatterManagement/CaseMaster.aspx?MatterCaseNo=${encodeURIComponent(f.case || "")}" target="_blank" rel="noopener">${esc(f.case)}</a>`;
+  const trackBtn = !f.case || tracked ? "" : pendingFor(f.case)
+    ? `<span class="tag ink">Adding…</span>`
+    : `<button class="textbtn quiet" data-act="tracksearchcase" data-case="${esc(f.case)}">+ Track</button>`;
+  return `<div class="filing">
+    <div class="head"><span class="type">${esc(f.doc_type)}</span> · ${caseLink} ${trackBtn}</div>
+    ${title ? `<div class="case-title">${esc(title)}</div>` : ""}
+    <ul>${f.documents.map((doc) => `<li><a class="doc" href="${esc(doc.url)}" target="_blank" rel="noopener">${esc(doc.title)}</a><span class="size">${esc(doc.ext)}${doc.size ? ` · ${esc(doc.size)}` : ""}</span></li>`).join("")}</ul>
+  </div>`;
+}
+
+// "#8516" -> the organization's name, when an earlier search listed it as another match
+function searchLabel(q) {
+  const seq = Number((q.match(/^#(\d+)$/) || [])[1]);
+  if (!seq) return q;
+  for (const x of DATA.searches || []) for (const o of x.others || []) if (o.seq === seq) return o.name;
+  return q;
+}
+
+function renderSearch(arg) {
+  setNav("search");
+  const saved = DATA.searches || [];
+  const waiting = pending().filter((p) => p.action === "search");
+  const current = saved.find((x) => String(x.seq) === arg) || (arg ? null : saved[saved.length - 1]);
+
+  view.innerHTML = `
+    <form class="track" id="searchform">
+      <label for="q">Search filings by company or organization</label>
+      <div class="track-row">
+        <input id="q" name="q" autocomplete="off" placeholder="City of New York, Sierra Club, NYPA…" required>
+        <button class="btn" type="submit">Search</button>
+      </div>
+      <p class="hint">Finds every filing an organization has made, across all PSC cases. The search runs on the tracker, so results appear here in a few minutes (this page checks automatically), and saved searches refresh every few hours.</p>
+      <div class="problems" id="problems"></div>
+    </form>
+    <h2 class="section-head">Saved searches</h2>
+    <div class="chips search-chips">
+      ${saved.map((x) => `<a class="chip${current && x.seq === current.seq ? " on" : ""}" href="#/search/${x.seq}" style="text-decoration:none">${esc(x.name)}<span class="n">${x.filings.length.toLocaleString()}</span></a>`).join("")}
+      ${waiting.map((p) => `<span class="chip ghost">Searching “${esc(searchLabel(p.name))}”…</span>`).join("")}
+      ${!saved.length && !waiting.length ? `<p class="empty">No saved searches yet. Search for an organization above.</p>` : ""}
+    </div>
+    <div id="results"></div>`;
+
+  document.getElementById("searchform").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = e.target.q.value.trim().replace(/\s+/g, " ");
+    const problems = document.getElementById("problems");
+    if (q.length < 2) return (problems.textContent = "Type at least two letters.");
+    const existing = findSearch(q);
+    if (existing) return (location.hash = `#/search/${existing.seq}`);
+    try {
+      await sendCommand("search", [], [q]);
+      renderSearch(arg);
+    } catch (err) {
+      problems.textContent = err.message;
+    }
+  });
+  if (!current) return;
+
+  const cases = new Set(current.filings.map((f) => f.case));
+  const years = [...new Set(current.filings.map((f) => (f.date || "").slice(0, 4)).filter(Boolean))].sort().reverse();
+  const types = {};
+  current.filings.forEach((f) => (types[f.doc_type] = (types[f.doc_type] || 0) + 1));
+  const topTypes = Object.entries(types).sort((a, b) => b[1] - a[1]).slice(0, 7);
+  const state = { type: null, year: "", q: "", shown: PAGE };
+  const removing = pending().some((p) => p.action === "unsearch" && p.name === `#${current.seq}`);
+
+  document.getElementById("results").innerHTML = `
+    <header class="case-head search-head">
+      <div class="kicker">Filings by</div>
+      <h1>${esc(current.name)}</h1>
+      <p class="case-sum">${current.filings.length.toLocaleString()} filings in ${cases.size.toLocaleString()} cases${years.length ? `, ${years[years.length - 1]}–${years[0]}` : ""}. Searched as “${esc(current.query)}”.</p>
+      ${current.others?.length ? `<p class="others">Also matched: ${current.others.map((o) => `<button class="pill add" data-act="searchother" data-seq="${o.seq}" data-name="${esc(o.name)}">${esc(o.name)}</button>`).join(" ")}</p>` : ""}
+      <div class="case-actions">${removing ? `<span class="tag ink">Removing…</span>` : `<button class="textbtn quiet" data-act="unsearch" data-seq="${current.seq}">Remove this search</button>`}</div>
+    </header>
+    <div class="filters">
+      <input id="fq" type="search" placeholder="Search titles and case numbers" aria-label="Filter results">
+      <select id="fyear" aria-label="Year"><option value="">All years</option>${years.map((y) => `<option>${y}</option>`).join("")}</select>
+      <button class="chip on" data-type="">All<span class="n">${current.filings.length}</span></button>
+      ${topTypes.map(([t, n]) => `<button class="chip" data-type="${esc(t)}">${esc(t)}<span class="n">${n}</span></button>`).join("")}
+    </div>
+    <div id="timeline"></div>`;
+
+  const timeline = document.getElementById("timeline");
+  const draw = () => {
+    const q = state.q.toLowerCase();
+    const rows = current.filings.filter(
+      (f) =>
+        (!state.type || f.doc_type === state.type) &&
+        (!state.year || (f.date || "").startsWith(state.year)) &&
+        (!q || lc(f.case).includes(q) || lc(current.titles?.[f.case]).includes(q) || f.documents.some((d) => lc(d.title).includes(q)))
+    );
+    const byDay = [];
+    rows.slice(0, state.shown).forEach((f) => {
+      const last = byDay[byDay.length - 1];
+      if (last && last.date === f.date) last.items.push(f);
+      else byDay.push({ date: f.date, items: [f] });
+    });
+    timeline.innerHTML =
+      (rows.length ? "" : `<p class="empty">No filings match.</p>`) +
+      byDay.map((d) => `<section class="day">
+        <div class="day-label">${shortDate(d.date)}<small>${esc(relDay(d.date) || (d.date || "").slice(0, 4))}</small></div>
+        <div>${d.items.map((f) => searchFilingRow(f, current)).join("")}</div></section>`).join("") +
+      (rows.length > state.shown
+        ? `<div class="more"><button class="btn ghost" id="more">Show ${Math.min(PAGE, rows.length - state.shown)} more of ${(rows.length - state.shown).toLocaleString()}</button></div>`
+        : "");
+    document.getElementById("more")?.addEventListener("click", () => {
+      state.shown += PAGE;
+      draw();
+    });
+  };
+  draw();
+  document.getElementById("fq").addEventListener("input", (e) => ((state.q = e.target.value), (state.shown = PAGE), draw()));
+  document.getElementById("fyear").addEventListener("change", (e) => ((state.year = e.target.value), (state.shown = PAGE), draw()));
+  view.querySelectorAll(".filters .chip").forEach((chip) =>
+    chip.addEventListener("click", () => {
+      view.querySelectorAll(".filters .chip").forEach((x) => x.classList.toggle("on", x === chip));
+      state.type = chip.dataset.type || null;
+      state.shown = PAGE;
+      draw();
+    })
+  );
+}
+
 /* ---------- briefing archive ---------- */
 
 function renderBriefing(day) {
@@ -686,6 +831,7 @@ function route(scroll = true) {
   if (pending().length) watchForUpdates();
   if (page === "case" && arg) renderCase(decodeURIComponent(arg));
   else if (page === "briefing") renderBriefing(arg);
+  else if (page === "search") renderSearch(arg);
   else renderWatchlist();
 }
 window.addEventListener("hashchange", () => route());
